@@ -1,0 +1,7 @@
+node_modules/
+.DS_Store
+*_split/
+*.zip
+*.mp4
+.tempmediaStorage/
+output/

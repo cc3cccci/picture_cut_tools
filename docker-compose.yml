@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  grid-splitter:
+    build: .
+    container_name: grid-splitter
+    restart: unless-stopped
+    ports:
+      - "5002:5002"
+    volumes:
+      # 映射宿主机的物理目录到容器内，可将其改为你的挂载路径（如 /mnt/sda1/split_output）
+      - ./output:/app/output
+    environment:
+      - PORT=5002
