@@ -1,4 +1,8 @@
 // Main application state
+let imageQueue = []; // array of { id, file, name, img, width, height, cropX1, cropY1, cropX2, cropY2, rows, cols, hRatios, vRatios, gridSpacing, autocropTolerance, autocropShrink, cachedImgData }
+let activeQueueIndex = -1; // currently active image in the queue
+let excludedSlices = new Set(); // Set of "imageId_rowIndex_colIndex" keys for excluded sub-images
+
 let currentImage = null;
 let imageWidth = 0;
 let imageHeight = 0;
@@ -6,7 +10,7 @@ let scale = 1;
 let sourceFileName = 'split_images';
 let cachedImgData = null; // Cache pixel data for instant real-time scanning
 let gridSpacing = 0; // Spacing/gutter between grid cells in image pixels
-let generatedSlices = []; // List of all generated sub-image slices
+let generatedSlices = []; // List of all generated sub-image slices for current active image
 let activeLightboxIndex = 1; // Currently active slice index in lightbox modal
 
 // Crop boundaries (in image pixels)
@@ -69,6 +73,14 @@ const inputCols = document.getElementById('input-cols');
 const btnApplyCustom = document.getElementById('btn-apply-custom');
 const btnCustomPreset = document.getElementById('btn-custom-preset');
 
+// New DOM elements for Queue
+const queueCountText = document.getElementById('queue-count');
+const queueList = document.getElementById('queue-list');
+const btnQueueSync = document.getElementById('btn-queue-sync');
+const btnQueueClear = document.getElementById('btn-queue-clear');
+const queueAddCard = document.getElementById('queue-add-card');
+const queueAddInput = document.getElementById('queue-add-input');
+
 // --- Initialization & Event Listeners ---
 
 // Initialize default parameters
@@ -78,6 +90,7 @@ function init() {
     setupCanvasHandlers();
     setupExportHandlers();
     setupResizeHandler();
+    setupQueueHandlers();
 }
 
 // Drag & drop upload handlers
@@ -103,13 +116,13 @@ function setupUploadHandlers() {
         const dt = e.dataTransfer;
         const files = dt.files;
         if (files.length > 0) {
-            handleImageFile(files[0]);
+            handleImageFiles(Array.from(files));
         }
     });
 
     fileInput.addEventListener('change', (e) => {
         if (e.target.files.length > 0) {
-            handleImageFile(e.target.files[0]);
+            handleImageFiles(Array.from(e.target.files));
         }
     });
 
@@ -118,6 +131,9 @@ function setupUploadHandlers() {
         currentImage = null;
         imageWidth = 0;
         imageHeight = 0;
+        imageQueue = [];
+        activeQueueIndex = -1;
+        excludedSlices.clear();
         previewsContainer.innerHTML = '';
         previewCountText.innerText = '0';
         fileInput.value = '';
@@ -125,69 +141,383 @@ function setupUploadHandlers() {
         // Toggle view
         editorContainer.classList.add('hidden');
         uploadZone.classList.remove('hidden');
-        showToast('已重置，请重新上传图片。', 'info');
+        showToast('已重置并清空队列，请重新上传图片。', 'info');
     });
 }
 
-// Process the uploaded image file
-function handleImageFile(file) {
-    if (!file.type.startsWith('image/')) {
-        showToast('只支持上传图片文件！', 'error');
+// Initialize handlers for the new Image Queue
+function setupQueueHandlers() {
+    btnQueueClear.addEventListener('click', () => {
+        btnReupload.click();
+    });
+
+    btnQueueSync.addEventListener('click', () => {
+        syncSettingsToAll();
+    });
+
+    queueAddCard.addEventListener('click', () => {
+        queueAddInput.click();
+    });
+
+    queueAddInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            handleImageFiles(Array.from(e.target.files));
+            queueAddInput.value = ''; // Reset input value to allow duplicate upload attempts
+        }
+    });
+}
+
+// Save active configurations to current queue item
+function saveActiveStateToQueueItem() {
+    if (activeQueueIndex < 0 || activeQueueIndex >= imageQueue.length) return;
+    const item = imageQueue[activeQueueIndex];
+    item.cropX1 = cropX1;
+    item.cropY1 = cropY1;
+    item.cropX2 = cropX2;
+    item.cropY2 = cropY2;
+    item.rows = rows;
+    item.cols = cols;
+    item.hRatios = [...hRatios];
+    item.vRatios = [...vRatios];
+    item.gridSpacing = gridSpacing;
+    item.autocropTolerance = parseInt(autocropTolerance.value);
+    item.autocropShrink = parseInt(autocropShrink.value);
+}
+
+// Sync active queue item configuration to the editor global state & UI
+function syncActiveImageStateToUI() {
+    if (activeQueueIndex < 0 || activeQueueIndex >= imageQueue.length) return;
+    const item = imageQueue[activeQueueIndex];
+    currentImage = item.img;
+    imageWidth = item.width;
+    imageHeight = item.height;
+    cropX1 = item.cropX1;
+    cropY1 = item.cropY1;
+    cropX2 = item.cropX2;
+    cropY2 = item.cropY2;
+    rows = item.rows;
+    cols = item.cols;
+    hRatios = item.hRatios;
+    vRatios = item.vRatios;
+    gridSpacing = item.gridSpacing;
+    sourceFileName = item.name;
+    cachedImgData = item.cachedImgData;
+
+    // Update preset buttons state
+    let presetFound = false;
+    document.querySelectorAll('.btn-preset').forEach(btn => {
+        btn.classList.remove('active');
+        const r = parseInt(btn.getAttribute('data-rows'));
+        const c = parseInt(btn.getAttribute('data-cols'));
+        if (r === rows && c === cols && btn.id !== 'btn-custom-preset') {
+            btn.classList.add('active');
+            customGridForm.classList.add('hidden');
+            presetFound = true;
+        }
+    });
+
+    if (!presetFound) {
+        btnCustomPreset.classList.add('active');
+        customGridForm.classList.remove('hidden');
+        inputRows.value = rows;
+        inputCols.value = cols;
+    }
+
+    gridGutter.value = gridSpacing;
+    gridGutterVal.innerText = gridSpacing + ' px';
+    autocropTolerance.value = item.autocropTolerance;
+    autocropTolVal.innerText = item.autocropTolerance;
+    autocropShrink.value = item.autocropShrink;
+    autocropShrinkVal.innerText = item.autocropShrink + ' px';
+}
+
+// Process the uploaded image files (adds them to the queue)
+async function handleImageFiles(files) {
+    if (files.length === 0) return;
+
+    if (files.length > 1) {
+        showToast('正在加载 ' + files.length + ' 张图片，请稍候...', 'info');
+    }
+
+    let loadedCount = 0;
+
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (!file.type.startsWith('image/')) {
+            showToast('文件 "' + file.name + '" 不是图片格式已跳过。', 'error');
+            continue;
+        }
+
+        try {
+            const item = await loadImageFileToQueueItem(file);
+            imageQueue.push(item);
+            loadedCount++;
+        } catch (err) {
+            showToast('加载 "' + file.name + '" 失败: ' + err.message, 'error');
+        }
+    }
+
+    if (loadedCount > 0) {
+        // Toggle view
+        uploadZone.classList.add('hidden');
+        editorContainer.classList.remove('hidden');
+
+        // Set default active if none selected
+        if (activeQueueIndex === -1) {
+            activeQueueIndex = 0;
+        }
+
+        syncActiveImageStateToUI();
+        resizeCanvas();
+        renderQueueUI();
+        updatePreviews();
+
+        showToast('成功导入 ' + loadedCount + ' 张图片！', 'success');
+    }
+}
+
+// Load a single File and return a structured queue item object
+function loadImageFileToQueueItem(file) {
+    return new Promise((resolve, reject) => {
+        let name = 'split_images';
+        if (file && file.name) {
+            const lastDot = file.name.lastIndexOf('.');
+            if (lastDot !== -1) {
+                name = file.name.substring(0, lastDot);
+            } else {
+                name = file.name;
+            }
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                const w = img.naturalWidth;
+                const h = img.naturalHeight;
+
+                // Cache pixel data for instant auto-crop scanning
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = w;
+                tempCanvas.height = h;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.drawImage(img, 0, 0);
+                const cachedData = tempCtx.getImageData(0, 0, w, h).data;
+
+                // Default 3x3 layout ratios
+                const initialRows = 3;
+                const initialCols = 3;
+                const hRats = [];
+                const vRats = [];
+                for (let r = 1; r < initialRows; r++) hRats.push(r / initialRows);
+                for (let c = 1; c < initialCols; c++) vRats.push(c / initialCols);
+
+                const item = {
+                    id: 'img_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                    file: file,
+                    name: name,
+                    img: img,
+                    width: w,
+                    height: h,
+                    cropX1: 0,
+                    cropY1: 0,
+                    cropX2: w,
+                    cropY2: h,
+                    rows: initialRows,
+                    cols: initialCols,
+                    hRatios: hRats,
+                    vRatios: vRats,
+                    gridSpacing: 0,
+                    autocropTolerance: 45,
+                    autocropShrink: 2,
+                    cachedImgData: cachedData
+                };
+                resolve(item);
+            };
+            img.onerror = () => reject(new Error('无法解析图片数据'));
+            img.src = e.target.result;
+        };
+        reader.onerror = () => reject(new Error('文件读取出错'));
+        reader.readAsDataURL(file);
+    });
+}
+
+// Render the horizontal filmstrip image queue UI
+function renderQueueUI() {
+    queueCountText.innerText = imageQueue.length + ' 张';
+    queueList.innerHTML = '';
+
+    imageQueue.forEach((item, index) => {
+        const queueItem = document.createElement('div');
+        queueItem.className = 'queue-item' + (index === activeQueueIndex ? ' active' : '');
+        queueItem.title = item.name;
+
+        const img = document.createElement('img');
+        img.src = item.img.src;
+        img.draggable = false;
+
+        const badge = document.createElement('div');
+        badge.className = 'queue-item-badge';
+        badge.innerText = index + 1;
+
+        // Hover control overlays
+        const controls = document.createElement('div');
+        controls.className = 'queue-item-controls';
+
+        // Move item left
+        if (index > 0) {
+            const btnLeft = document.createElement('button');
+            btnLeft.className = 'queue-ctrl-btn ctrl-left';
+            btnLeft.innerHTML = '←';
+            btnLeft.title = '向前移动';
+            btnLeft.addEventListener('click', (e) => {
+                e.stopPropagation();
+                moveQueueItem(index, index - 1);
+            });
+            controls.appendChild(btnLeft);
+        }
+
+        // Delete item
+        const btnDel = document.createElement('button');
+        btnDel.className = 'queue-ctrl-btn ctrl-delete';
+        btnDel.innerHTML = '×';
+        btnDel.title = '删除此图';
+        btnDel.addEventListener('click', (e) => {
+            e.stopPropagation();
+            removeQueueItem(index);
+        });
+        controls.appendChild(btnDel);
+
+        // Move item right
+        if (index < imageQueue.length - 1) {
+            const btnRight = document.createElement('button');
+            btnRight.className = 'queue-ctrl-btn ctrl-right';
+            btnRight.innerHTML = '→';
+            btnRight.title = '向后移动';
+            btnRight.addEventListener('click', (e) => {
+                e.stopPropagation();
+                moveQueueItem(index, index + 1);
+            });
+            controls.appendChild(btnRight);
+        }
+
+        queueItem.appendChild(img);
+        queueItem.appendChild(badge);
+        queueItem.appendChild(controls);
+
+        queueItem.addEventListener('click', () => {
+            if (activeQueueIndex === index) return;
+            saveActiveStateToQueueItem();
+            activeQueueIndex = index;
+            syncActiveImageStateToUI();
+            resizeCanvas();
+            renderQueueUI();
+            updatePreviews();
+        });
+
+        queueList.appendChild(queueItem);
+    });
+}
+
+// Swap positions of items in the queue
+function moveQueueItem(from, to) {
+    if (from < 0 || from >= imageQueue.length || to < 0 || to >= imageQueue.length) return;
+
+    saveActiveStateToQueueItem();
+
+    const temp = imageQueue[from];
+    imageQueue[from] = imageQueue[to];
+    imageQueue[to] = temp;
+
+    // Track selection index changes
+    if (activeQueueIndex === from) {
+        activeQueueIndex = to;
+    } else if (activeQueueIndex === to) {
+        activeQueueIndex = from;
+    }
+
+    syncActiveImageStateToUI();
+    renderQueueUI();
+    updatePreviews();
+}
+
+// Remove an image item from the queue
+function removeQueueItem(index) {
+    if (index < 0 || index >= imageQueue.length) return;
+
+    const deletedId = imageQueue[index].id;
+    // Wipe associated excluded slices key map
+    for (const key of excludedSlices) {
+        if (key.startsWith(deletedId + '_')) {
+            excludedSlices.delete(key);
+        }
+    }
+
+    imageQueue.splice(index, 1);
+
+    if (imageQueue.length === 0) {
+        // Reset everything if queue empty
+        currentImage = null;
+        imageWidth = 0;
+        imageHeight = 0;
+        activeQueueIndex = -1;
+        previewsContainer.innerHTML = '';
+        previewCountText.innerText = '0';
+        fileInput.value = '';
+        editorContainer.classList.add('hidden');
+        uploadZone.classList.remove('hidden');
+        showToast('队列清空完毕，请重新上传。', 'info');
+    } else {
+        if (activeQueueIndex >= imageQueue.length) {
+            activeQueueIndex = imageQueue.length - 1;
+        }
+        syncActiveImageStateToUI();
+        resizeCanvas();
+        renderQueueUI();
+        updatePreviews();
+        showToast('已从图片队列移除。', 'info');
+    }
+}
+
+// Sync the current image settings to all other images in the queue
+function syncSettingsToAll() {
+    if (activeQueueIndex === -1 || imageQueue.length <= 1) {
+        showToast('图片队列中没有其他图片可同步参数。', 'warning');
         return;
     }
 
-    // Extract file name without extension
-    if (file && file.name) {
-        const lastDot = file.name.lastIndexOf('.');
-        if (lastDot !== -1) {
-            sourceFileName = file.name.substring(0, lastDot);
-        } else {
-            sourceFileName = file.name;
-        }
-    } else {
-        sourceFileName = 'split_images';
-    }
+    saveActiveStateToQueueItem();
+    const source = imageQueue[activeQueueIndex];
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-            currentImage = img;
-            imageWidth = img.naturalWidth;
-            imageHeight = img.naturalHeight;
-            
-            // Set initial crop box to full image dimensions
-            cropX1 = 0;
-            cropY1 = 0;
-            cropX2 = imageWidth;
-            cropY2 = imageHeight;
+    // Compute percent bounds relative to source size
+    const rx1 = source.cropX1 / source.width;
+    const ry1 = source.cropY1 / source.height;
+    const rx2 = source.cropX2 / source.width;
+    const ry2 = source.cropY2 / source.height;
 
-            // Cache pixel data for instant real-time scanning
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = imageWidth;
-            tempCanvas.height = imageHeight;
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCtx.drawImage(img, 0, 0);
-            cachedImgData = tempCtx.getImageData(0, 0, imageWidth, imageHeight).data;
-            
-            // Preset values
-            resetGridRatios();
-            
-            // Toggle view
-            uploadZone.classList.add('hidden');
-            editorContainer.classList.remove('hidden');
-            
-            // Recalculate layout and draw
-            resizeCanvas();
-            updatePreviews();
-            showToast('图片加载成功！拖拽绿线或黄点可调整分图边界。', 'success');
-        };
-        img.onerror = () => {
-            showToast('无法解析此图片。', 'error');
-        };
-        img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
+    imageQueue.forEach((item, index) => {
+        if (index === activeQueueIndex) return;
+
+        item.rows = source.rows;
+        item.cols = source.cols;
+        item.gridSpacing = source.gridSpacing;
+        item.autocropTolerance = source.autocropTolerance;
+        item.autocropShrink = source.autocropShrink;
+
+        item.hRatios = [...source.hRatios];
+        item.vRatios = [...source.vRatios];
+
+        // Apply matching aspect ratio bounds
+        item.cropX1 = Math.round(rx1 * item.width);
+        item.cropY1 = Math.round(ry1 * item.height);
+        item.cropX2 = Math.round(rx2 * item.width);
+        item.cropY2 = Math.round(ry2 * item.height);
+    });
+
+    syncActiveImageStateToUI();
+    draw();
+    updatePreviews();
+    showToast('已成功将当前网格及去边参数同步到全部图片！', 'success');
 }
 
 // Setup format settings & grid adjustments
@@ -206,9 +536,10 @@ function setupConfigHandlers() {
                 rows = parseInt(clickedBtn.getAttribute('data-rows'));
                 cols = parseInt(clickedBtn.getAttribute('data-cols'));
                 resetGridRatios();
+                saveActiveStateToQueueItem();
                 draw();
                 updatePreviews();
-                showToast(`已切换至 ${rows}×${cols} 网格`, 'info');
+                showToast('已切换至 ' + rows + '×' + cols + ' 网格', 'info');
             }
         });
     });
@@ -224,9 +555,10 @@ function setupConfigHandlers() {
         rows = r;
         cols = c;
         resetGridRatios();
+        saveActiveStateToQueueItem();
         draw();
         updatePreviews();
-        showToast(`已应用自定义网格: ${rows} 行 × ${cols} 列`, 'success');
+        showToast('已应用自定义网格: ' + rows + ' 行 × ' + cols + ' 列', 'success');
     });
 
     // Reset grid alignment
@@ -236,6 +568,7 @@ function setupConfigHandlers() {
         cropX2 = imageWidth;
         cropY2 = imageHeight;
         resetGridRatios();
+        saveActiveStateToQueueItem();
         draw();
         updatePreviews();
         showToast('已恢复默认均匀平分边界。', 'success');
@@ -261,6 +594,7 @@ function setupConfigHandlers() {
     gridGutter.addEventListener('input', (e) => {
         gridSpacing = parseInt(e.target.value);
         gridGutterVal.innerText = gridSpacing + ' px';
+        saveActiveStateToQueueItem();
         draw();
         updatePreviews();
     });
@@ -336,6 +670,7 @@ function getMinCropWidth() {
     return cols * MIN_GAP + 20;
 }
 
+// Minimum size calculations dynamically based on grid size
 function getMinCropHeight() {
     return rows * MIN_GAP + 20;
 }
@@ -450,6 +785,7 @@ function setupCanvasHandlers() {
     const endDrag = () => {
         if (draggedElement) {
             draggedElement = null;
+            saveActiveStateToQueueItem();
             updatePreviews();
             draw();
         }
@@ -590,6 +926,8 @@ function handleDrag(coords) {
         vRatios[idx - 1] = Math.max(prevRatio + minRatioGap, Math.min(nextRatio - minRatioGap, requestedRatio));
     }
 
+    // Save values right away
+    saveActiveStateToQueueItem();
     draw();
 }
 
@@ -732,12 +1070,29 @@ function draw() {
 // --- Live Thumbnail Previews & Crop Generation ---
 
 function updatePreviews() {
-    if (!currentImage) return;
+    if (!currentImage || activeQueueIndex === -1) return;
 
     previewsContainer.innerHTML = '';
     generatedSlices = [];
     const format = selectFormat.value;
     const quality = parseFloat(rangeQuality.value) / 100;
+    
+    saveActiveStateToQueueItem();
+    const activeItem = imageQueue[activeQueueIndex];
+    
+    // 1. Calculate the starting continuous index for this active image
+    let globalIndex = 1;
+    for (let i = 0; i < activeQueueIndex; i++) {
+        const item = imageQueue[i];
+        for (let r = 0; r < item.rows; r++) {
+            for (let c = 0; c < item.cols; c++) {
+                const key = item.id + '_' + r + '_' + c;
+                if (!excludedSlices.has(key)) {
+                    globalIndex++;
+                }
+            }
+        }
+    }
     
     // Absolute bounds on image pixels (rounded to integers)
     const boundsH = [
@@ -751,7 +1106,7 @@ function updatePreviews() {
         Math.round(cropX2)
     ];
 
-    let index = 1;
+    let currentSlicesCount = 0;
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
             const x = boundsV[c];
@@ -779,6 +1134,9 @@ function updatePreviews() {
 
             if (w <= 0 || h <= 0) continue;
 
+            const sliceKey = activeItem.id + '_' + r + '_' + c;
+            const isExcluded = excludedSlices.has(sliceKey);
+
             // Render crop to preview offscreen
             const offCanvas = document.createElement('canvas');
             offCanvas.width = w;
@@ -788,54 +1146,96 @@ function updatePreviews() {
 
             const dataURL = offCanvas.toDataURL(format, format === 'image/png' ? undefined : quality);
 
+            // If excluded, it doesn't take up an active sequence index
+            let badgeIndex = 0;
+            if (!isExcluded) {
+                badgeIndex = globalIndex;
+                globalIndex++;
+            }
+
             generatedSlices.push({
-                index: index,
+                index: badgeIndex, // 0 means excluded
+                originalIndex: currentSlicesCount + 1, // local index starting from 1
+                key: sliceKey,
                 dataURL: dataURL,
                 w: w,
                 h: h,
-                format: format
+                format: format,
+                isExcluded: isExcluded
             });
 
             // Generate card element
             const card = document.createElement('div');
-            card.className = 'preview-card';
+            card.className = 'preview-card' + (isExcluded ? ' excluded' : '');
             
             const badge = document.createElement('div');
             badge.className = 'preview-badge';
-            badge.innerText = index;
+            badge.innerText = isExcluded ? '✕' : badgeIndex;
 
             const imgEl = document.createElement('img');
             imgEl.className = 'preview-img';
             imgEl.src = dataURL;
             imgEl.draggable = false;
 
+            // Create Delete/Exclude Button (No backticks inside this innerHTML statement!)
+            const btnExclude = document.createElement('button');
+            btnExclude.className = 'preview-exclude-btn';
+            btnExclude.title = isExcluded ? '恢复此子图' : '排除此子图';
+            btnExclude.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="10" height="10"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+            btnExclude.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (isExcluded) {
+                    excludedSlices.delete(sliceKey);
+                } else {
+                    excludedSlices.add(sliceKey);
+                }
+                updatePreviews();
+            });
+
             const btnSingleDownload = document.createElement('button');
             btnSingleDownload.className = 'preview-download-btn';
             btnSingleDownload.title = '下载此图';
-            btnSingleDownload.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`;
+            btnSingleDownload.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>';
             
-            const currentIdx = index;
+            const localSliceIndex = generatedSlices.length;
             btnSingleDownload.addEventListener('click', (e) => {
                 e.stopPropagation();
-                triggerSingleDownload(dataURL, currentIdx, format);
+                if (isExcluded) return;
+                triggerSingleDownload(dataURL, badgeIndex, format);
             });
 
             // Click card thumbnail to zoom in
             card.addEventListener('click', (e) => {
-                if (e.target.closest('.preview-download-btn')) return;
-                openLightbox(currentIdx);
+                if (e.target.closest('.preview-download-btn') || e.target.closest('.preview-exclude-btn')) return;
+                if (isExcluded) return;
+                openLightbox(localSliceIndex);
             });
 
             card.appendChild(badge);
             card.appendChild(imgEl);
+            card.appendChild(btnExclude);
             card.appendChild(btnSingleDownload);
             previewsContainer.appendChild(card);
 
-            index++;
+            currentSlicesCount++;
         }
     }
     
-    previewCountText.innerText = rows * cols;
+    // 2. Count total active slices across the entire queue
+    let totalActiveCount = globalIndex - 1;
+    for (let i = activeQueueIndex + 1; i < imageQueue.length; i++) {
+        const item = imageQueue[i];
+        for (let r = 0; r < item.rows; r++) {
+            for (let c = 0; c < item.cols; c++) {
+                const key = item.id + '_' + r + '_' + c;
+                if (!excludedSlices.has(key)) {
+                    totalActiveCount++;
+                }
+            }
+        }
+    }
+    
+    previewCountText.innerText = totalActiveCount;
 }
 
 // Download a single sub-image
@@ -843,21 +1243,23 @@ function triggerSingleDownload(dataURL, idx, format) {
     const ext = format.split('/')[1];
     const a = document.createElement('a');
     a.href = dataURL;
-    a.download = `split_${idx}.${ext}`;
+    a.download = 'split_' + idx + '.' + ext;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    showToast(`子图 #${idx} 已下载。`, 'success');
+    showToast('子图 #' + idx + ' 已下载。', 'success');
 }
 
 // --- Bulk Export System (ZIP Generator) ---
 
 function setupExportHandlers() {
     btnExportZip.addEventListener('click', () => {
-        if (!currentImage) {
+        if (imageQueue.length === 0) {
             showToast('请先上传图片！', 'error');
             return;
         }
+
+        saveActiveStateToQueueItem();
 
         const format = selectFormat.value;
         const quality = parseFloat(rangeQuality.value) / 100;
@@ -865,73 +1267,89 @@ function setupExportHandlers() {
 
         // Visual feedback loader loading animation trigger
         btnExportZip.disabled = true;
-        btnExportZip.innerHTML = `<svg class="animate-spin" style="animation: spin 1s linear infinite;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.2)"></circle><path d="M4 12a8 8 0 0 1 8-8v8H4z" fill="currentColor"></path></svg> 打包中...`;
+        btnExportZip.innerHTML = '<svg class="animate-spin" style="animation: spin 1s linear infinite;" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.2)"></circle><path d="M4 12a8 8 0 0 1 8-8v8H4z" fill="currentColor"></path></svg> 打包中...';
 
         // Wait brief tick so browser can paint loader
         setTimeout(async () => {
             try {
                 const zip = new JSZip();
+                let globalIndex = 1;
                 
-                // Rounded boundaries to integers
-                const boundsH = [
-                    Math.round(cropY1),
-                    ...hRatios.map(r => Math.round(cropY1 + r * (cropY2 - cropY1))),
-                    Math.round(cropY2)
-                ];
-                const boundsV = [
-                    Math.round(cropX1),
-                    ...vRatios.map(r => Math.round(cropX1 + r * (cropX2 - cropX1))),
-                    Math.round(cropX2)
-                ];
+                for (let i = 0; i < imageQueue.length; i++) {
+                    const item = imageQueue[i];
+                    
+                    const boundsH = [
+                        Math.round(item.cropY1),
+                        ...item.hRatios.map(r => Math.round(item.cropY1 + r * (item.cropY2 - item.cropY1))),
+                        Math.round(item.cropY2)
+                    ];
+                    const boundsV = [
+                        Math.round(item.cropX1),
+                        ...item.vRatios.map(r => Math.round(item.cropX1 + r * (item.cropX2 - item.cropX1))),
+                        Math.round(item.cropX2)
+                    ];
 
-                let index = 1;
-                for (let r = 0; r < rows; r++) {
-                    for (let c = 0; c < cols; c++) {
-                        const x = boundsV[c];
-                        const y = boundsH[r];
-                        
-                        // Adjust inner boundaries for cell gutter spacing
-                        let startX = x;
-                        let endX = boundsV[c + 1];
-                        if (c > 0) startX += gridSpacing / 2;
-                        if (c < cols - 1) endX -= gridSpacing / 2;
-                        
-                        let startY = y;
-                        let endY = boundsH[r + 1];
-                        if (r > 0) startY += gridSpacing / 2;
-                        if (r < rows - 1) endY -= gridSpacing / 2;
+                    for (let r = 0; r < item.rows; r++) {
+                        for (let c = 0; c < item.cols; c++) {
+                            const sliceKey = item.id + '_' + r + '_' + c;
+                            if (excludedSlices.has(sliceKey)) {
+                                continue; // Skip excluded slices
+                            }
 
-                        const roundedStartX = Math.round(startX);
-                        const roundedEndX = Math.round(endX);
-                        const roundedStartY = Math.round(startY);
-                        const roundedEndY = Math.round(endY);
-                        
-                        const w = roundedEndX - roundedStartX;
-                        const h = roundedEndY - roundedStartY;
+                            const x = boundsV[c];
+                            const y = boundsH[r];
+                            
+                            // Adjust inner boundaries for cell gutter spacing
+                            let startX = x;
+                            let endX = boundsV[c + 1];
+                            if (c > 0) startX += item.gridSpacing / 2;
+                            if (c < item.cols - 1) endX -= item.gridSpacing / 2;
+                            
+                            let startY = y;
+                            let endY = boundsH[r + 1];
+                            if (r > 0) startY += item.gridSpacing / 2;
+                            if (r < item.rows - 1) endY -= item.gridSpacing / 2;
 
-                        if (w <= 0 || h <= 0) continue;
+                            const roundedStartX = Math.round(startX);
+                            const roundedEndX = Math.round(endX);
+                            const roundedStartY = Math.round(startY);
+                            const roundedEndY = Math.round(endY);
+                            
+                            const w = roundedEndX - roundedStartX;
+                            const h = roundedEndY - roundedStartY;
 
-                        const offCanvas = document.createElement('canvas');
-                        offCanvas.width = w;
-                        offCanvas.height = h;
-                        const offCtx = offCanvas.getContext('2d');
-                        offCtx.drawImage(currentImage, roundedStartX, roundedStartY, w, h, 0, 0, w, h);
+                            if (w <= 0 || h <= 0) continue;
 
-                        // Use native toBlob to prevent any base64 string corruption
-                        const blob = await new Promise(resolve => {
-                            offCanvas.toBlob(resolve, format, format === 'image/png' ? undefined : quality);
-                        });
-                        
-                        zip.file(`split_${index}.${ext}`, blob);
-                        index++;
+                            const offCanvas = document.createElement('canvas');
+                            offCanvas.width = w;
+                            offCanvas.height = h;
+                            const offCtx = offCanvas.getContext('2d');
+                            offCtx.drawImage(item.img, roundedStartX, roundedStartY, w, h, 0, 0, w, h);
+
+                            // Use native toBlob to prevent any base64 string corruption
+                            const blob = await new Promise(resolve => {
+                                offCanvas.toBlob(resolve, format, format === 'image/png' ? undefined : quality);
+                            });
+                            
+                            zip.file('split_' + globalIndex + '.' + ext, blob);
+                            globalIndex++;
+                        }
                     }
+                }
+
+                if (globalIndex === 1) {
+                    showToast('没有可导出的有效子图！', 'warning');
+                    resetExportButton();
+                    return;
                 }
 
                 const content = await zip.generateAsync({ type: 'blob' });
                 const a = document.createElement('a');
                 const url = URL.createObjectURL(content);
                 a.href = url;
-                a.download = `${sourceFileName}.zip`;
+                
+                const zipName = imageQueue.length > 1 ? imageQueue[0].name + '_batch' : imageQueue[0].name;
+                a.download = zipName + '.zip';
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
@@ -941,7 +1359,7 @@ function setupExportHandlers() {
                     URL.revokeObjectURL(url);
                 }, 15000);
 
-                showToast('ZIP 导出完成！已开始自动下载。', 'success');
+                showToast('ZIP 导出完成！已成功打包 ' + (globalIndex - 1) + ' 张子图。', 'success');
                 resetExportButton();
             } catch (error) {
                 showToast('打包失败: ' + error.message, 'error');
@@ -950,12 +1368,14 @@ function setupExportHandlers() {
         }, 100);
     });
 
-    // Save directly to local project folder
+    // Save directly to local project folder (using single quotes for DOM string)
     btnSaveLocal.addEventListener('click', () => {
-        if (!currentImage) {
+        if (imageQueue.length === 0) {
             showToast('请先上传图片！', 'error');
             return;
         }
+
+        saveActiveStateToQueueItem();
 
         const format = selectFormat.value;
         const quality = parseFloat(rangeQuality.value) / 100;
@@ -963,72 +1383,84 @@ function setupExportHandlers() {
 
         btnSaveLocal.disabled = true;
         const originalHTML = btnSaveLocal.innerHTML;
-        btnSaveLocal.innerHTML = `
-            <svg class="animate-spin" style="animation: spin 1s linear infinite;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5">
-                <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.2)"></circle>
-                <path d="M4 12a8 8 0 0 1 8-8v8H4z" fill="currentColor"></path>
-            </svg>
-            保存中...
-        `;
+        btnSaveLocal.innerHTML = '<svg class="animate-spin" style="animation: spin 1s linear infinite;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.2)"></circle><path d="M4 12a8 8 0 0 1 8-8v8H4z" fill="currentColor"></path></svg> 保存中...';
 
         setTimeout(async () => {
             try {
+                const folderName = imageQueue.length > 1 ? imageQueue[0].name + '_batch_split' : imageQueue[0].name + '_split';
                 const payload = {
-                    folderName: `${sourceFileName}_split`,
+                    folderName: folderName,
                     files: []
                 };
 
-                const boundsH = [
-                    Math.round(cropY1),
-                    ...hRatios.map(r => Math.round(cropY1 + r * (cropY2 - cropY1))),
-                    Math.round(cropY2)
-                ];
-                const boundsV = [
-                    Math.round(cropX1),
-                    ...vRatios.map(r => Math.round(cropX1 + r * (cropX2 - cropX1))),
-                    Math.round(cropX2)
-                ];
+                let globalIndex = 1;
 
-                let index = 1;
-                for (let r = 0; r < rows; r++) {
-                    for (let c = 0; c < cols; c++) {
-                        const x = boundsV[c];
-                        const y = boundsH[r];
-                        
-                        // Adjust inner boundaries for cell gutter spacing
-                        let startX = x;
-                        let endX = boundsV[c + 1];
-                        if (c > 0) startX += gridSpacing / 2;
-                        if (c < cols - 1) endX -= gridSpacing / 2;
-                        
-                        let startY = y;
-                        let endY = boundsH[r + 1];
-                        if (r > 0) startY += gridSpacing / 2;
-                        if (r < rows - 1) endY -= gridSpacing / 2;
+                for (let i = 0; i < imageQueue.length; i++) {
+                    const item = imageQueue[i];
+                    
+                    const boundsH = [
+                        Math.round(item.cropY1),
+                        ...item.hRatios.map(r => Math.round(item.cropY1 + r * (item.cropY2 - item.cropY1))),
+                        Math.round(item.cropY2)
+                    ];
+                    const boundsV = [
+                        Math.round(item.cropX1),
+                        ...item.vRatios.map(r => Math.round(item.cropX1 + r * (item.cropX2 - item.cropX1))),
+                        Math.round(item.cropX2)
+                    ];
 
-                        const roundedStartX = Math.round(startX);
-                        const roundedEndX = Math.round(endX);
-                        const roundedStartY = Math.round(startY);
-                        const roundedEndY = Math.round(endY);
-                        
-                        const w = roundedEndX - roundedStartX;
-                        const h = roundedEndY - roundedStartY;
+                    for (let r = 0; r < item.rows; r++) {
+                        for (let c = 0; c < item.cols; c++) {
+                            const sliceKey = item.id + '_' + r + '_' + c;
+                            if (excludedSlices.has(sliceKey)) {
+                                continue;
+                            }
 
-                        if (w <= 0 || h <= 0) continue;
+                            const x = boundsV[c];
+                            const y = boundsH[r];
+                            
+                            // Adjust inner boundaries for cell gutter spacing
+                            let startX = x;
+                            let endX = boundsV[c + 1];
+                            if (c > 0) startX += item.gridSpacing / 2;
+                            if (c < item.cols - 1) endX -= item.gridSpacing / 2;
+                            
+                            let startY = y;
+                            let endY = boundsH[r + 1];
+                            if (r > 0) startY += item.gridSpacing / 2;
+                            if (r < item.rows - 1) endY -= item.gridSpacing / 2;
 
-                        const offCanvas = document.createElement('canvas');
-                        offCanvas.width = w;
-                        offCanvas.height = h;
-                        const offCtx = offCanvas.getContext('2d');
-                        offCtx.drawImage(currentImage, roundedStartX, roundedStartY, w, h, 0, 0, w, h);
+                            const roundedStartX = Math.round(startX);
+                            const roundedEndX = Math.round(endX);
+                            const roundedStartY = Math.round(startY);
+                            const roundedEndY = Math.round(endY);
+                            
+                            const w = roundedEndX - roundedStartX;
+                            const h = roundedEndY - roundedStartY;
 
-                        const dataURL = offCanvas.toDataURL(format, format === 'image/png' ? undefined : quality);
-                        payload.files.push({
-                            name: `split_${index}.${ext}`,
-                            data: dataURL
-                        });
-                        index++;
+                            if (w <= 0 || h <= 0) continue;
+
+                            const offCanvas = document.createElement('canvas');
+                            offCanvas.width = w;
+                            offCanvas.height = h;
+                            const offCtx = offCanvas.getContext('2d');
+                            offCtx.drawImage(item.img, roundedStartX, roundedStartY, w, h, 0, 0, w, h);
+
+                            const dataURL = offCanvas.toDataURL(format, format === 'image/png' ? undefined : quality);
+                            payload.files.push({
+                                name: 'split_' + globalIndex + '.' + ext,
+                                data: dataURL
+                            });
+                            globalIndex++;
+                        }
                     }
+                }
+
+                if (payload.files.length === 0) {
+                    showToast('没有可导出的有效子图！', 'warning');
+                    btnSaveLocal.disabled = false;
+                    btnSaveLocal.innerHTML = originalHTML;
+                    return;
                 }
 
                 const response = await fetch('/api/save', {
@@ -1041,7 +1473,7 @@ function setupExportHandlers() {
                 const result = await response.json();
 
                 if (result.success) {
-                    showToast(`已成功保存至项目目录: ${sourceFileName}_split/`, 'success');
+                    showToast('已成功保存至项目目录: ' + folderName + '/ (共 ' + payload.files.length + ' 张子图)', 'success');
                 } else {
                     showToast('保存失败: ' + result.error, 'error');
                 }
@@ -1057,14 +1489,7 @@ function setupExportHandlers() {
 
 function resetExportButton() {
     btnExportZip.disabled = false;
-    btnExportZip.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="21 15 16 20 11 15"></polyline>
-            <line x1="16" y1="10" x2="16" y2="20"></line>
-            <path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"></path>
-        </svg>
-        一键打包 ZIP 导出
-    `;
+    btnExportZip.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 15 16 20 11 15"></polyline><line x1="16" y1="10" x2="16" y2="20"></line><path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"></path></svg> 打包 ZIP 导出';
 }
 
 // --- Toast System ---
@@ -1072,18 +1497,18 @@ function resetExportButton() {
 function showToast(message, type = 'success') {
     const container = document.getElementById('toast-container');
     const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
+    toast.className = 'toast toast-' + type;
     
     let icon = '';
     if (type === 'success') {
-        icon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`;
+        icon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>';
     } else if (type === 'error') {
-        icon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>`;
+        icon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>';
     } else {
-        icon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`;
+        icon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>';
     }
     
-    toast.innerHTML = `${icon}<span>${message}</span>`;
+    toast.innerHTML = icon + '<span>' + message + '</span>';
     container.appendChild(toast);
     
     setTimeout(() => {
@@ -1103,11 +1528,12 @@ function openLightbox(index) {
     
     activeLightboxIndex = index;
     const slice = generatedSlices[index - 1];
+    if (slice.isExcluded) return;
     
     modalImg.src = slice.dataURL;
-    modalTitle.innerText = `子图 #${slice.index}`;
+    modalTitle.innerText = '子图 #' + slice.index;
     const ext = slice.format.split('/')[1].toUpperCase();
-    modalDim.innerText = `${slice.w} × ${slice.h} 像素 (${ext})`;
+    modalDim.innerText = slice.w + ' × ' + slice.h + ' 像素 (' + ext + ')';
     activeLightboxData = { src: slice.dataURL, idx: slice.index, format: slice.format };
     
     previewModal.classList.remove('hidden');
@@ -1115,13 +1541,22 @@ function openLightbox(index) {
 
 function navigateLightbox(dir) {
     if (generatedSlices.length === 0) return;
-    let nextIndex = activeLightboxIndex + dir;
-    if (nextIndex < 1) {
-        nextIndex = generatedSlices.length;
-    } else if (nextIndex > generatedSlices.length) {
-        nextIndex = 1;
+    let nextIndex = activeLightboxIndex;
+    let loopCount = 0;
+    while (loopCount < generatedSlices.length) {
+        nextIndex += dir;
+        if (nextIndex < 1) {
+            nextIndex = generatedSlices.length;
+        } else if (nextIndex > generatedSlices.length) {
+            nextIndex = 1;
+        }
+        
+        if (!generatedSlices[nextIndex - 1].isExcluded) {
+            openLightbox(nextIndex);
+            return;
+        }
+        loopCount++;
     }
-    openLightbox(nextIndex);
 }
 
 const closeModal = () => {
@@ -1340,12 +1775,14 @@ function runAutoCrop(showToastFeedback = false) {
         cropX2 = newX2;
         cropY2 = newY2;
 
+        saveActiveStateToQueueItem();
+
         // Trigger redraw and previews update
         draw();
         updatePreviews();
         
         if (showToastFeedback) {
-            showToast(`智能去边成功！已裁剪边缘白/黑边 (收缩了 ${shrinkPixels}px 边缘)。`, 'success');
+            showToast('智能去边成功！已裁剪边缘白/黑边 (收缩了 ' + shrinkPixels + 'px 边缘)。', 'success');
         }
 
     } catch (err) {
