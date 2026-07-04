@@ -6,6 +6,8 @@ let scale = 1;
 let sourceFileName = 'split_images';
 let cachedImgData = null; // Cache pixel data for instant real-time scanning
 let gridSpacing = 0; // Spacing/gutter between grid cells in image pixels
+let generatedSlices = []; // List of all generated sub-image slices
+let activeLightboxIndex = 1; // Currently active slice index in lightbox modal
 
 // Crop boundaries (in image pixels)
 let cropX1 = 0;
@@ -59,6 +61,8 @@ const modalImg = document.getElementById('modal-img');
 const modalTitle = document.getElementById('modal-title');
 const modalDim = document.getElementById('modal-dim');
 const modalDownloadBtn = document.getElementById('modal-download-btn');
+const modalPrevBtn = document.getElementById('modal-prev-btn');
+const modalNextBtn = document.getElementById('modal-next-btn');
 const customGridForm = document.getElementById('custom-grid-form');
 const inputRows = document.getElementById('input-rows');
 const inputCols = document.getElementById('input-cols');
@@ -731,6 +735,7 @@ function updatePreviews() {
     if (!currentImage) return;
 
     previewsContainer.innerHTML = '';
+    generatedSlices = [];
     const format = selectFormat.value;
     const quality = parseFloat(rangeQuality.value) / 100;
     
@@ -783,6 +788,14 @@ function updatePreviews() {
 
             const dataURL = offCanvas.toDataURL(format, format === 'image/png' ? undefined : quality);
 
+            generatedSlices.push({
+                index: index,
+                dataURL: dataURL,
+                w: w,
+                h: h,
+                format: format
+            });
+
             // Generate card element
             const card = document.createElement('div');
             card.className = 'preview-card';
@@ -802,8 +815,6 @@ function updatePreviews() {
             btnSingleDownload.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`;
             
             const currentIdx = index;
-            const currentW = w;
-            const currentH = h;
             btnSingleDownload.addEventListener('click', (e) => {
                 e.stopPropagation();
                 triggerSingleDownload(dataURL, currentIdx, format);
@@ -812,7 +823,7 @@ function updatePreviews() {
             // Click card thumbnail to zoom in
             card.addEventListener('click', (e) => {
                 if (e.target.closest('.preview-download-btn')) return;
-                openLightbox(dataURL, currentIdx, currentW, currentH, format);
+                openLightbox(currentIdx);
             });
 
             card.appendChild(badge);
@@ -1087,13 +1098,30 @@ function showToast(message, type = 'success') {
 
 let activeLightboxData = null;
 
-function openLightbox(src, idx, w, h, format) {
-    modalImg.src = src;
-    modalTitle.innerText = `子图 #${idx}`;
-    const ext = format.split('/')[1].toUpperCase();
-    modalDim.innerText = `${w} × ${h} 像素 (${ext})`;
-    activeLightboxData = { src, idx, format };
+function openLightbox(index) {
+    if (index < 1 || index > generatedSlices.length) return;
+    
+    activeLightboxIndex = index;
+    const slice = generatedSlices[index - 1];
+    
+    modalImg.src = slice.dataURL;
+    modalTitle.innerText = `子图 #${slice.index}`;
+    const ext = slice.format.split('/')[1].toUpperCase();
+    modalDim.innerText = `${slice.w} × ${slice.h} 像素 (${ext})`;
+    activeLightboxData = { src: slice.dataURL, idx: slice.index, format: slice.format };
+    
     previewModal.classList.remove('hidden');
+}
+
+function navigateLightbox(dir) {
+    if (generatedSlices.length === 0) return;
+    let nextIndex = activeLightboxIndex + dir;
+    if (nextIndex < 1) {
+        nextIndex = generatedSlices.length;
+    } else if (nextIndex > generatedSlices.length) {
+        nextIndex = 1;
+    }
+    openLightbox(nextIndex);
 }
 
 const closeModal = () => {
@@ -1102,16 +1130,60 @@ const closeModal = () => {
     activeLightboxData = null;
 };
 
-// Set up close events
+// Set up close and nav events
 document.querySelector('.modal-close').addEventListener('click', closeModal);
 previewModal.addEventListener('click', (e) => {
     if (e.target === previewModal) {
         closeModal();
     }
 });
+
+modalPrevBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    navigateLightbox(-1);
+});
+
+modalNextBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    navigateLightbox(1);
+});
+
+// Touch swipe gesture handlers on modal image for mobile
+let touchStartX = 0;
+let touchStartY = 0;
+
+modalImg.addEventListener('touchstart', (e) => {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+}, { passive: true });
+
+modalImg.addEventListener('touchend', (e) => {
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    
+    const diffX = touchEndX - touchStartX;
+    const diffY = touchEndY - touchStartY;
+    
+    // Swipe horizontal threshold: 50px, vertical constraint: < 80px to distinguish from vertical scroll
+    if (Math.abs(diffX) > 50 && Math.abs(diffY) < 80) {
+        if (diffX > 0) {
+            navigateLightbox(-1); // Swipe Right -> view previous
+        } else {
+            navigateLightbox(1);  // Swipe Left -> view next
+        }
+    }
+}, { passive: true });
+
+// Keyboard navigation (Esc to close, Arrow keys to navigate)
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !previewModal.classList.contains('hidden')) {
+    if (previewModal.classList.contains('hidden')) return;
+    
+    if (e.key === 'Escape') {
         closeModal();
+    } else if (e.key === 'ArrowLeft') {
+        navigateLightbox(-1);
+    } else if (e.key === 'ArrowRight') {
+        navigateLightbox(1);
     }
 });
 

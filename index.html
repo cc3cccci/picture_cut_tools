@@ -207,6 +207,12 @@
     <!-- Lightbox Modal for Large Preview -->
     <div id="preview-modal" class="modal hidden">
         <span class="modal-close">&times;</span>
+        
+        <!-- Left Arrow -->
+        <button id="modal-prev-btn" class="modal-nav-btn modal-prev" aria-label="上一张">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="24" height="24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        </button>
+
         <div class="modal-content-wrapper">
             <img id="modal-img" class="modal-img" src="" alt="放大预览">
             <div class="modal-info">
@@ -220,6 +226,11 @@
                 </button>
             </div>
         </div>
+
+        <!-- Right Arrow -->
+        <button id="modal-next-btn" class="modal-nav-btn modal-next" aria-label="下一张">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="24" height="24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+        </button>
     </div>
 
     <script src="app.js"></script>

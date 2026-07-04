@@ -834,6 +834,41 @@ input[type="range"]::-webkit-slider-thumb:hover {
     margin-top: 4px;
 }
 
+/* Lightbox Navigation Buttons */
+.modal-nav-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(17, 24, 39, 0.4);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    width: 54px;
+    height: 54px;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: var(--transition-fast);
+    z-index: 10005;
+    backdrop-filter: blur(8px);
+}
+
+.modal-nav-btn:hover {
+    color: var(--text-primary);
+    background: rgba(139, 92, 246, 0.2);
+    border-color: var(--color-accent);
+    box-shadow: 0 0 16px rgba(139, 92, 246, 0.3);
+}
+
+.modal-prev {
+    left: 24px;
+}
+
+.modal-next {
+    right: 24px;
+}
+
 /* Mobile responsive styling for iPhone and small screens */
 @media (max-width: 768px) {
     body {
@@ -939,5 +974,25 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
     .modal-img {
         max-height: 55vh;
+    }
+
+    /* Mobile overrides for navigation buttons */
+    .modal-nav-btn {
+        width: 42px;
+        height: 42px;
+        background: rgba(17, 24, 39, 0.6);
+    }
+
+    .modal-nav-btn svg {
+        width: 18px;
+        height: 18px;
+    }
+
+    .modal-prev {
+        left: 8px;
+    }
+
+    .modal-next {
+        right: 8px;
     }
 }
