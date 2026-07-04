@@ -94,6 +94,7 @@ body {
     letter-spacing: -0.5px;
     background: linear-gradient(120deg, #ffffff 60%, #cbd5e1 100%);
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
     display: flex;
     align-items: center;
@@ -481,6 +482,7 @@ body {
 /* Custom styled range input */
 input[type="range"] {
     -webkit-appearance: none;
+    appearance: none;
     width: 100%;
     height: 6px;
     background: var(--bg-input);
@@ -491,6 +493,7 @@ input[type="range"] {
 
 input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
+    appearance: none;
     width: 14px;
     height: 14px;
     border-radius: 50%;
