@@ -833,3 +833,111 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .modal-actions {
     margin-top: 4px;
 }
+
+/* Mobile responsive styling for iPhone and small screens */
+@media (max-width: 768px) {
+    body {
+        overflow-y: auto; /* Allow whole page scrolling on mobile */
+    }
+
+    .app-container {
+        height: auto;
+        min-height: 100vh;
+        padding: 12px;
+        gap: 12px;
+        overflow: visible;
+    }
+
+    .app-header {
+        padding-bottom: 6px;
+    }
+
+    .logo-area h1 {
+        font-size: 18px;
+    }
+
+    .logo-icon {
+        width: 24px;
+        height: 24px;
+    }
+
+    .subtitle {
+        font-size: 11px;
+    }
+
+    .workspace {
+        flex-direction: column;
+        height: auto;
+        gap: 12px;
+        overflow: visible;
+    }
+
+    .editor-container {
+        flex-direction: column;
+        height: auto;
+        gap: 12px;
+    }
+
+    .canvas-workspace {
+        flex: none;
+        height: 380px; /* Fixed height container for visual editor */
+        width: 100%;
+        padding: 12px;
+    }
+
+    .sidebar {
+        width: 100%;
+        height: auto;
+        min-height: unset;
+        box-shadow: none;
+    }
+
+    .panel-section {
+        padding: 14px;
+    }
+
+    .sidebar-footer {
+        flex-direction: column;
+        padding: 14px;
+        border-bottom-left-radius: var(--radius-lg);
+        border-bottom-right-radius: var(--radius-lg);
+    }
+
+    .action-buttons-group {
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .btn {
+        width: 100%;
+        padding: 12px 16px;
+    }
+
+    .preset-grids {
+        gap: 6px;
+    }
+
+    /* Previews scroll size adjustment */
+    .previews-container {
+        max-height: 300px;
+    }
+
+    /* Lightbox Modal adjustment on mobile */
+    .modal-close {
+        top: 16px;
+        right: 16px;
+        width: 36px;
+        height: 36px;
+        font-size: 24px;
+    }
+
+    .modal-content-wrapper {
+        max-width: 95%;
+        max-height: 90%;
+        gap: 12px;
+    }
+
+    .modal-img {
+        max-height: 55vh;
+    }
+}

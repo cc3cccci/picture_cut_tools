@@ -339,65 +339,85 @@ function getMinCropHeight() {
 // --- Canvas Interactive Engine ---
 
 function setupCanvasHandlers() {
-    // Mouse hover detection
-    canvas.addEventListener('mousemove', (e) => {
+    // Helper to get coordinates on canvas supporting both mouse and touch
+    const getCoordinates = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        let clientX, clientY;
+        if (e.touches && e.touches.length > 0) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+        } else {
+            clientX = e.clientX;
+            clientY = e.clientY;
+        }
+        return {
+            x: clientX - rect.left,
+            y: clientY - rect.top
+        };
+    };
+
+    // Mouse hover and touch dragging move detection
+    const onMove = (e) => {
         if (!currentImage) return;
         
+        const coords = getCoordinates(e);
+        const mx = coords.x;
+        const my = coords.y;
+
         // If dragging, process drag update
         if (draggedElement) {
-            handleDrag(e);
+            if (e.cancelable) e.preventDefault(); // Stop mobile touch viewport panning
+            handleDrag(coords);
             return;
         }
 
-        // Get coordinates on canvas
-        const rect = canvas.getBoundingClientRect();
-        const mx = e.clientX - rect.left;
-        const my = e.clientY - rect.top;
+        // Only do hover visual updates on desktop mousemove (touches don't hover)
+        if (e.type === 'mousemove') {
+            const hit = testHitTest(mx, my);
+            hoveredElement = hit;
 
-        // Hit-test interactive elements (priority: Corners -> Outer Borders -> Inner Lines)
-        const hit = testHitTest(mx, my);
-        hoveredElement = hit;
-
-        // Change cursor style based on hovered target
-        if (hit) {
-            if (hit.type === 'corner') {
-                if (hit.index === 0 || hit.index === 3) {
-                    canvas.style.cursor = 'nwse-resize'; // TL, BR
-                } else {
-                    canvas.style.cursor = 'nesw-resize'; // TR, BL
+            if (hit) {
+                if (hit.type === 'corner') {
+                    if (hit.index === 0 || hit.index === 3) {
+                        canvas.style.cursor = 'nwse-resize'; // TL, BR
+                    } else {
+                        canvas.style.cursor = 'nesw-resize'; // TR, BL
+                    }
+                } else if (hit.type === 'border') {
+                    canvas.style.cursor = (hit.name === 'top' || hit.name === 'bottom') ? 'ns-resize' : 'ew-resize';
+                } else if (hit.type === 'h-inner') {
+                    canvas.style.cursor = 'ns-resize';
+                } else if (hit.type === 'v-inner') {
+                    canvas.style.cursor = 'ew-resize';
                 }
-            } else if (hit.type === 'border') {
-                canvas.style.cursor = (hit.name === 'top' || hit.name === 'bottom') ? 'ns-resize' : 'ew-resize';
-            } else if (hit.type === 'h-inner') {
-                canvas.style.cursor = 'ns-resize';
-            } else if (hit.type === 'v-inner') {
-                canvas.style.cursor = 'ew-resize';
+            } else {
+                canvas.style.cursor = 'default';
             }
-        } else {
-            canvas.style.cursor = 'default';
+            draw();
         }
-        
-        // Highlight during hover
-        draw();
-    });
+    };
 
-    // Start dragging
-    canvas.addEventListener('mousedown', (e) => {
-        if (!currentImage || e.button !== 0) return; // Only left click
+    canvas.addEventListener('mousemove', onMove);
+    canvas.addEventListener('touchmove', onMove, { passive: false });
 
-        const rect = canvas.getBoundingClientRect();
-        const mx = e.clientX - rect.left;
-        const my = e.clientY - rect.top;
+    // Start dragging (mouse click or touch start)
+    const onStart = (e) => {
+        if (!currentImage) return;
+        if (e.type === 'mousedown' && e.button !== 0) return; // Only left click for mouse
+
+        const coords = getCoordinates(e);
+        const mx = coords.x;
+        const my = coords.y;
 
         const hit = testHitTest(mx, my);
         if (hit) {
+            if (e.cancelable) e.preventDefault(); // prevent touch scroll conflicts
             draggedElement = hit;
             const imgMX = mx / scale;
             const imgMY = my / scale;
             dragStartX = imgMX;
             dragStartY = imgMY;
             
-            // Record original values for delta calculations if needed
             draggedElement.startX = imgMX;
             draggedElement.startY = imgMY;
             
@@ -417,7 +437,10 @@ function setupCanvasHandlers() {
                 draggedElement.originalRatio = vRatios[hit.index - 1];
             }
         }
-    });
+    };
+
+    canvas.addEventListener('mousedown', onStart);
+    canvas.addEventListener('touchstart', onStart, { passive: false });
 
     // Drag release
     const endDrag = () => {
@@ -429,6 +452,8 @@ function setupCanvasHandlers() {
     };
     canvas.addEventListener('mouseup', endDrag);
     canvas.addEventListener('mouseleave', endDrag);
+    canvas.addEventListener('touchend', endDrag);
+    canvas.addEventListener('touchcancel', endDrag);
 }
 
 // Convert coordinates to test interactive line & handles hits
@@ -498,10 +523,9 @@ function testHitTest(mx, my) {
 }
 
 // Drag update computations
-function handleDrag(e) {
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
+function handleDrag(coords) {
+    const mx = coords.x;
+    const my = coords.y;
 
     const imgMX = Math.max(0, Math.min(imageWidth, mx / scale));
     const imgMY = Math.max(0, Math.min(imageHeight, my / scale));
