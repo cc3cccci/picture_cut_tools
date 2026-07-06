@@ -1199,6 +1199,9 @@ function updatePreviews() {
     
     saveActiveStateToQueueItem();
     const activeItem = imageQueue[activeQueueIndex];
+
+    // Set the preview grid columns to match the image's grid layout
+    previewsContainer.style.setProperty('--preview-cols', cols);
     
     // 1. Calculate the starting continuous index for this active image
     let globalIndex = 1;
