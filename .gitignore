@@ -5,3 +5,10 @@ node_modules/
 *.mp4
 .tempmediaStorage/
 output/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
