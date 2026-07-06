@@ -1,32 +1,32 @@
-/* CSS Reset & Variable Definitions */
+/* CSS Reset & Variable Definitions — Minimalist Gold Theme */
 :root {
-    --bg-main: #080b11;
-    --bg-card: rgba(17, 22, 34, 0.75);
-    --bg-card-solid: #111622;
-    --bg-input: #1a2030;
-    --border-color: rgba(255, 255, 255, 0.08);
-    --border-color-active: rgba(139, 92, 246, 0.4);
+    --bg-main: #0e0f11;
+    --bg-card: rgba(20, 21, 24, 0.80);
+    --bg-card-solid: #141518;
+    --bg-input: #1b1c20;
+    --border-color: rgba(255, 255, 255, 0.06);
+    --border-color-active: rgba(201, 169, 110, 0.4);
     
-    --text-primary: #f3f4f6;
-    --text-secondary: #9ca3af;
-    --text-muted: #6b7280;
+    --text-primary: #e8e6e1;
+    --text-secondary: #8a8780;
+    --text-muted: #5c5a55;
     
-    --color-accent: #8b5cf6;
-    --color-accent-hover: #a78bfa;
-    --color-success: #10b981;
-    --color-success-hover: #34d399;
-    --color-danger: #ef4444;
+    --color-accent: #c9a96e;
+    --color-accent-hover: #ddc08a;
+    --color-success: #7dae6b;
+    --color-success-hover: #9bc48c;
+    --color-danger: #c25550;
     
-    --gradient-primary: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%);
-    --gradient-glow: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(59, 130, 246, 0.15) 100%);
+    --gradient-primary: linear-gradient(135deg, #c9a96e 0%, #a3894e 100%);
+    --gradient-glow: linear-gradient(135deg, rgba(201, 169, 110, 0.10) 0%, rgba(163, 137, 78, 0.08) 100%);
     
-    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
-    --shadow-md: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-    --shadow-lg: 0 12px 48px 0 rgba(0, 0, 0, 0.5);
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
+    --shadow-md: 0 8px 32px 0 rgba(0, 0, 0, 0.40);
+    --shadow-lg: 0 12px 48px 0 rgba(0, 0, 0, 0.55);
     
-    --radius-sm: 8px;
-    --radius-md: 12px;
-    --radius-lg: 16px;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
     --radius-full: 9999px;
     
     --transition-fast: 0.15s ease;
@@ -49,8 +49,8 @@ body {
     flex-direction: column;
     overflow-x: hidden;
     background-image: 
-        radial-gradient(at 0% 0%, rgba(139, 92, 246, 0.08) 0px, transparent 50%),
-        radial-gradient(at 100% 100%, rgba(59, 130, 246, 0.08) 0px, transparent 50%);
+        radial-gradient(at 0% 0%, rgba(201, 169, 110, 0.04) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(163, 137, 78, 0.03) 0px, transparent 50%);
     background-attachment: fixed;
 }
 
@@ -85,14 +85,14 @@ body {
     width: 28px;
     height: 28px;
     color: var(--color-accent);
-    filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.4));
+    filter: drop-shadow(0 0 6px rgba(201, 169, 110, 0.3));
 }
 
 .logo-area h1 {
     font-size: 22px;
     font-weight: 700;
     letter-spacing: -0.5px;
-    background: linear-gradient(120deg, #ffffff 60%, #cbd5e1 100%);
+    background: linear-gradient(120deg, #e8e6e1 60%, #c9a96e 100%);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -107,9 +107,9 @@ body {
     background: var(--gradient-primary);
     padding: 2px 6px;
     border-radius: var(--radius-full);
-    color: white;
+    color: #1a1a1a;
     letter-spacing: 0.5px;
-    box-shadow: 0 0 10px rgba(139, 92, 246, 0.3);
+    box-shadow: 0 0 8px rgba(201, 169, 110, 0.2);
     -webkit-text-fill-color: initial;
 }
 
@@ -128,7 +128,7 @@ body {
 /* Upload Zone styling */
 .upload-zone {
     flex: 1;
-    border: 2px dashed rgba(255, 255, 255, 0.15);
+    border: 1px dashed rgba(255, 255, 255, 0.10);
     border-radius: var(--radius-lg);
     background-color: var(--bg-card);
     backdrop-filter: blur(16px);
@@ -154,7 +154,7 @@ body {
 
 .upload-zone:hover, .upload-zone.dragover {
     border-color: var(--color-accent);
-    box-shadow: 0 0 24px rgba(139, 92, 246, 0.15);
+    box-shadow: 0 0 20px rgba(201, 169, 110, 0.08);
 }
 
 .upload-zone:hover::before, .upload-zone.dragover::before {
@@ -195,10 +195,10 @@ body {
 
 .upload-zone:hover .upload-icon-wrapper, .upload-zone.dragover .upload-icon-wrapper {
     color: var(--color-accent);
-    background: rgba(139, 92, 246, 0.1);
+    background: rgba(201, 169, 110, 0.08);
     border-color: var(--color-accent-hover);
     transform: translateY(-4px);
-    box-shadow: 0 8px 16px rgba(139, 92, 246, 0.1);
+    box-shadow: 0 8px 16px rgba(201, 169, 110, 0.06);
 }
 
 .upload-icon {
@@ -396,7 +396,7 @@ body {
 .btn-preset.active {
     background: var(--gradient-glow);
     border-color: var(--color-accent);
-    box-shadow: 0 0 12px rgba(139, 92, 246, 0.15);
+    box-shadow: 0 0 10px rgba(201, 169, 110, 0.10);
 }
 
 .btn-preset.active .preset-name {
@@ -455,7 +455,7 @@ body {
 
 .input-group input:focus, .input-group select:focus {
     border-color: var(--color-accent);
-    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.15);
+    box-shadow: 0 0 0 2px rgba(201, 169, 110, 0.12);
 }
 
 #btn-apply-custom {
@@ -526,7 +526,7 @@ input[type="range"]::-webkit-slider-thumb {
     border-radius: 50%;
     background: var(--color-accent);
     cursor: pointer;
-    box-shadow: 0 0 6px rgba(139, 92, 246, 0.5);
+    box-shadow: 0 0 6px rgba(201, 169, 110, 0.35);
     transition: transform var(--transition-fast);
 }
 
@@ -598,8 +598,8 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
 .preview-img {
     width: 100%;
-    height: 100%;
-    object-fit: cover;
+    height: auto;
+    object-fit: contain;
     display: block;
 }
 
@@ -625,8 +625,8 @@ input[type="range"]::-webkit-slider-thumb:hover {
     position: absolute;
     bottom: 4px;
     right: 4px;
-    background: rgba(139, 92, 246, 0.85);
-    color: white;
+    background: rgba(201, 169, 110, 0.85);
+    color: #1a1a1a;
     width: 20px;
     height: 20px;
     border-radius: 4px;
@@ -668,15 +668,15 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
 .btn-primary {
     background: var(--gradient-primary);
-    color: white;
+    color: #1a1a1a;
     border: none;
     font-weight: 600;
-    box-shadow: 0 4px 14px rgba(139, 92, 246, 0.35);
+    box-shadow: 0 4px 14px rgba(201, 169, 110, 0.20);
 }
 
 .btn-primary:hover {
-    box-shadow: 0 6px 20px rgba(139, 92, 246, 0.5);
-    background: linear-gradient(135deg, #9a75f8 0%, #4f8ff7 100%);
+    box-shadow: 0 6px 20px rgba(201, 169, 110, 0.30);
+    background: linear-gradient(135deg, #ddc08a 0%, #c9a96e 100%);
     transform: translateY(-1px);
 }
 
@@ -757,15 +757,15 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 
 .btn-success {
-    background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
-    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3) !important;
-    color: white !important;
+    background: linear-gradient(135deg, #7dae6b 0%, #5e9450 100%) !important;
+    box-shadow: 0 4px 14px rgba(125, 174, 107, 0.20) !important;
+    color: #1a1a1a !important;
     border: none !important;
 }
 
 .btn-success:hover {
-    background: linear-gradient(135deg, #34d399 0%, #10b981 100%) !important;
-    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45) !important;
+    background: linear-gradient(135deg, #9bc48c 0%, #7dae6b 100%) !important;
+    box-shadow: 0 6px 20px rgba(125, 174, 107, 0.30) !important;
     transform: translateY(-1px);
 }
 
@@ -887,9 +887,9 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
 .modal-nav-btn:hover {
     color: var(--text-primary);
-    background: rgba(139, 92, 246, 0.2);
+    background: rgba(201, 169, 110, 0.15);
     border-color: var(--color-accent);
-    box-shadow: 0 0 16px rgba(139, 92, 246, 0.3);
+    box-shadow: 0 0 12px rgba(201, 169, 110, 0.15);
 }
 
 .modal-prev {
@@ -956,6 +956,20 @@ input[type="range"]::-webkit-slider-thumb:hover {
         height: auto;
         min-height: unset;
         box-shadow: none;
+        flex-direction: column;
+    }
+
+    .sidebar-controls {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+        height: auto;
+        overflow-y: visible;
+    }
+
+    .preview-section {
+        height: auto;
+        max-height: 400px;
     }
 
     .panel-section {
@@ -1087,18 +1101,18 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
 .btn-xs:hover {
     color: var(--text-primary);
-    background: rgba(139, 92, 246, 0.15);
+    background: rgba(201, 169, 110, 0.10);
     border-color: var(--color-accent);
 }
 
 .btn-xs.btn-danger {
-    color: #f87171;
-    border-color: rgba(239, 68, 68, 0.2);
+    color: #c25550;
+    border-color: rgba(194, 85, 80, 0.2);
 }
 
 .btn-xs.btn-danger:hover {
     color: #ffffff;
-    background: rgba(239, 68, 68, 0.25);
+    background: rgba(194, 85, 80, 0.20);
     border-color: var(--color-danger);
 }
 
@@ -1148,7 +1162,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
 .queue-item-wrapper.drag-over .queue-item {
     border-color: var(--color-accent);
-    box-shadow: 0 0 12px rgba(139, 92, 246, 0.6);
+    box-shadow: 0 0 12px rgba(201, 169, 110, 0.35);
     transform: scale(1.05);
 }
 
@@ -1169,7 +1183,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
 .queue-item.active {
     border-color: var(--color-accent);
-    box-shadow: 0 0 10px rgba(139, 92, 246, 0.4);
+    box-shadow: 0 0 10px rgba(201, 169, 110, 0.25);
     transform: scale(1.02);
 }
 
@@ -1201,8 +1215,8 @@ input[type="range"]::-webkit-slider-thumb:hover {
     width: 18px;
     height: 18px;
     border-radius: 50%;
-    background: rgba(239, 68, 68, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(194, 85, 80, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     color: #ffffff;
     display: flex;
     justify-content: center;
@@ -1272,7 +1286,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .queue-add-card:hover {
     color: var(--color-accent-hover);
     border-color: var(--color-accent);
-    background: rgba(139, 92, 246, 0.05);
+    background: rgba(201, 169, 110, 0.05);
 }
 
 .queue-add-card span {
@@ -1371,3 +1385,14 @@ input[type="range"]::-webkit-slider-thumb:hover {
     min-height: 0;
 }
 
+/* Preview section fills remaining horizontal space in the sidebar */
+.preview-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    padding: 18px;
+    border-bottom: none;
+}

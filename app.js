@@ -1046,7 +1046,7 @@ function draw() {
     ctx.fillRect(cx2, cy1, canvas.width - cx2, cy2 - cy1);
 
     // 2. Draw Crop bounding box (Outer borders)
-    ctx.strokeStyle = '#f43f5e'; // default border color
+    ctx.strokeStyle = '#c9a96e'; // Gold border color
     ctx.lineWidth = 1.5;
     
     // Highlight border if hovered
@@ -1054,28 +1054,28 @@ function draw() {
     
     // Top border
     ctx.beginPath();
-    ctx.strokeStyle = isBorderHovered('top') ? '#fb7185' : '#f43f5e';
+    ctx.strokeStyle = isBorderHovered('top') ? '#ddc08a' : '#c9a96e';
     ctx.lineWidth = isBorderHovered('top') ? 2.5 : 1.5;
     ctx.moveTo(cx1, cy1); ctx.lineTo(cx2, cy1);
     ctx.stroke();
 
     // Bottom border
     ctx.beginPath();
-    ctx.strokeStyle = isBorderHovered('bottom') ? '#fb7185' : '#f43f5e';
+    ctx.strokeStyle = isBorderHovered('bottom') ? '#ddc08a' : '#c9a96e';
     ctx.lineWidth = isBorderHovered('bottom') ? 2.5 : 1.5;
     ctx.moveTo(cx1, cy2); ctx.lineTo(cx2, cy2);
     ctx.stroke();
 
     // Left border
     ctx.beginPath();
-    ctx.strokeStyle = isBorderHovered('left') ? '#fb7185' : '#f43f5e';
+    ctx.strokeStyle = isBorderHovered('left') ? '#ddc08a' : '#c9a96e';
     ctx.lineWidth = isBorderHovered('left') ? 2.5 : 1.5;
     ctx.moveTo(cx1, cy1); ctx.lineTo(cx1, cy2);
     ctx.stroke();
 
     // Right border
     ctx.beginPath();
-    ctx.strokeStyle = isBorderHovered('right') ? '#fb7185' : '#f43f5e';
+    ctx.strokeStyle = isBorderHovered('right') ? '#ddc08a' : '#c9a96e';
     ctx.lineWidth = isBorderHovered('right') ? 2.5 : 1.5;
     ctx.moveTo(cx2, cy1); ctx.lineTo(cx2, cy2);
     ctx.stroke();
@@ -1086,7 +1086,7 @@ function draw() {
 
     // Draw internal gutters (spacing)
     if (gridSpacing > 0) {
-        ctx.fillStyle = 'rgba(244, 63, 94, 0.15)'; // Translucent pinkish-red spacing band
+        ctx.fillStyle = 'rgba(201, 169, 110, 0.12)'; // Translucent gold spacing band
         const halfGutter = (gridSpacing / 2) * scale;
         
         // Horizontal gutters
@@ -1108,7 +1108,7 @@ function draw() {
     for (let i = 0; i < canvasH.length; i++) {
         const y = canvasH[i];
         const isHovered = hoveredElement && hoveredElement.type === 'h-inner' && hoveredElement.index === i + 1;
-        ctx.strokeStyle = isHovered ? '#34d399' : '#10b981'; // Green split lines
+        ctx.strokeStyle = isHovered ? '#ddc08a' : 'rgba(201, 169, 110, 0.55)'; // Gold split lines
         ctx.lineWidth = isHovered ? 2.5 : 1.5;
         
         ctx.beginPath();
@@ -1121,7 +1121,7 @@ function draw() {
     for (let i = 0; i < canvasV.length; i++) {
         const x = canvasV[i];
         const isHovered = hoveredElement && hoveredElement.type === 'v-inner' && hoveredElement.index === i + 1;
-        ctx.strokeStyle = isHovered ? '#34d399' : '#10b981';
+        ctx.strokeStyle = isHovered ? '#ddc08a' : 'rgba(201, 169, 110, 0.55)';
         ctx.lineWidth = isHovered ? 2.5 : 1.5;
         
         ctx.beginPath();
@@ -1136,7 +1136,7 @@ function draw() {
     if (gridSpacing > 0 || (activeQueueIndex !== -1 && imageQueue[activeQueueIndex].autocropShrink > 0)) {
         const shrinkVal = activeQueueIndex !== -1 ? imageQueue[activeQueueIndex].autocropShrink : 0;
         
-        ctx.strokeStyle = 'rgba(56, 189, 248, 0.75)'; // Beautiful sky-blue dashed border
+        ctx.strokeStyle = 'rgba(201, 169, 110, 0.45)'; // Soft gold dashed sub-image border
         ctx.lineWidth = 1;
         ctx.setLineDash([4, 4]);
 
@@ -1176,8 +1176,8 @@ function draw() {
     corners.forEach((corner, idx) => {
         const isHovered = hoveredElement && hoveredElement.type === 'corner' && hoveredElement.index === idx;
         
-        ctx.fillStyle = '#fbbf24'; // Yellow handle dots
-        ctx.strokeStyle = '#ffffff';
+        ctx.fillStyle = '#ddc08a'; // Gold handle dots
+        ctx.strokeStyle = '#2a2a2a';
         ctx.lineWidth = 2;
         
         ctx.beginPath();
