@@ -1494,122 +1494,124 @@ function setupExportHandlers() {
     });
 
     // Save directly to local project folder (using single quotes for DOM string)
-    btnSaveLocal.addEventListener('click', () => {
-        if (imageQueue.length === 0) {
-            showToast('请先上传图片！', 'error');
-            return;
-        }
+    if (btnSaveLocal) {
+        btnSaveLocal.addEventListener('click', () => {
+            if (imageQueue.length === 0) {
+                showToast('请先上传图片！', 'error');
+                return;
+            }
 
-        saveActiveStateToQueueItem();
+            saveActiveStateToQueueItem();
 
-        const format = selectFormat.value;
-        const quality = parseFloat(rangeQuality.value) / 100;
-        const ext = format.split('/')[1];
+            const format = selectFormat.value;
+            const quality = parseFloat(rangeQuality.value) / 100;
+            const ext = format.split('/')[1];
 
-        btnSaveLocal.disabled = true;
-        const originalHTML = btnSaveLocal.innerHTML;
-        btnSaveLocal.innerHTML = '<svg class="animate-spin" style="animation: spin 1s linear infinite;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.2)"></circle><path d="M4 12a8 8 0 0 1 8-8v8H4z" fill="currentColor"></path></svg> 保存中...';
+            btnSaveLocal.disabled = true;
+            const originalHTML = btnSaveLocal.innerHTML;
+            btnSaveLocal.innerHTML = '<svg class="animate-spin" style="animation: spin 1s linear infinite;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.2)"></circle><path d="M4 12a8 8 0 0 1 8-8v8H4z" fill="currentColor"></path></svg> 保存中...';
 
-        setTimeout(async () => {
-            try {
-                const folderName = imageQueue.length > 1 ? imageQueue[0].name + '_batch_split' : imageQueue[0].name + '_split';
-                const payload = {
-                    folderName: folderName,
-                    files: []
-                };
+            setTimeout(async () => {
+                try {
+                    const folderName = imageQueue.length > 1 ? imageQueue[0].name + '_batch_split' : imageQueue[0].name + '_split';
+                    const payload = {
+                        folderName: folderName,
+                        files: []
+                    };
 
-                let globalIndex = 1;
+                    let globalIndex = 1;
 
-                for (let i = 0; i < imageQueue.length; i++) {
-                    const item = imageQueue[i];
-                    
-                    const boundsH = [
-                        Math.round(item.cropY1),
-                        ...item.hRatios.map(r => Math.round(item.cropY1 + r * (item.cropY2 - item.cropY1))),
-                        Math.round(item.cropY2)
-                    ];
-                    const boundsV = [
-                        Math.round(item.cropX1),
-                        ...item.vRatios.map(r => Math.round(item.cropX1 + r * (item.cropX2 - item.cropX1))),
-                        Math.round(item.cropX2)
-                    ];
+                    for (let i = 0; i < imageQueue.length; i++) {
+                        const item = imageQueue[i];
+                        
+                        const boundsH = [
+                            Math.round(item.cropY1),
+                            ...item.hRatios.map(r => Math.round(item.cropY1 + r * (item.cropY2 - item.cropY1))),
+                            Math.round(item.cropY2)
+                        ];
+                        const boundsV = [
+                            Math.round(item.cropX1),
+                            ...item.vRatios.map(r => Math.round(item.cropX1 + r * (item.cropX2 - item.cropX1))),
+                            Math.round(item.cropX2)
+                        ];
 
-                    for (let r = 0; r < item.rows; r++) {
-                        for (let c = 0; c < item.cols; c++) {
-                            const sliceKey = item.id + '_' + r + '_' + c;
-                            if (excludedSlices.has(sliceKey)) {
-                                continue;
+                        for (let r = 0; r < item.rows; r++) {
+                            for (let c = 0; c < item.cols; c++) {
+                                const sliceKey = item.id + '_' + r + '_' + c;
+                                if (excludedSlices.has(sliceKey)) {
+                                    continue;
+                                }
+
+                                const x = boundsV[c];
+                                const y = boundsH[r];
+                                
+                                // Adjust inner boundaries for cell gutter spacing
+                                let startX = x;
+                                let endX = boundsV[c + 1];
+                                if (c > 0) startX += item.gridSpacing / 2;
+                                if (c < item.cols - 1) endX -= item.gridSpacing / 2;
+                                
+                                let startY = y;
+                                let endY = boundsH[r + 1];
+                                if (r > 0) startY += item.gridSpacing / 2;
+                                if (r < item.rows - 1) endY -= item.gridSpacing / 2;
+
+                                const roundedStartX = Math.round(startX);
+                                const roundedEndX = Math.round(endX);
+                                const roundedStartY = Math.round(startY);
+                                const roundedEndY = Math.round(endY);
+                                
+                                const w = roundedEndX - roundedStartX;
+                                const h = roundedEndY - roundedStartY;
+
+                                if (w <= 0 || h <= 0) continue;
+
+                                const offCanvas = document.createElement('canvas');
+                                offCanvas.width = w;
+                                offCanvas.height = h;
+                                const offCtx = offCanvas.getContext('2d');
+                                offCtx.drawImage(item.img, roundedStartX, roundedStartY, w, h, 0, 0, w, h);
+
+                                const dataURL = offCanvas.toDataURL(format, format === 'image/png' ? undefined : quality);
+                                payload.files.push({
+                                    name: 'split_' + globalIndex + '.' + ext,
+                                    data: dataURL
+                                });
+                                globalIndex++;
                             }
-
-                            const x = boundsV[c];
-                            const y = boundsH[r];
-                            
-                            // Adjust inner boundaries for cell gutter spacing
-                            let startX = x;
-                            let endX = boundsV[c + 1];
-                            if (c > 0) startX += item.gridSpacing / 2;
-                            if (c < item.cols - 1) endX -= item.gridSpacing / 2;
-                            
-                            let startY = y;
-                            let endY = boundsH[r + 1];
-                            if (r > 0) startY += item.gridSpacing / 2;
-                            if (r < item.rows - 1) endY -= item.gridSpacing / 2;
-
-                            const roundedStartX = Math.round(startX);
-                            const roundedEndX = Math.round(endX);
-                            const roundedStartY = Math.round(startY);
-                            const roundedEndY = Math.round(endY);
-                            
-                            const w = roundedEndX - roundedStartX;
-                            const h = roundedEndY - roundedStartY;
-
-                            if (w <= 0 || h <= 0) continue;
-
-                            const offCanvas = document.createElement('canvas');
-                            offCanvas.width = w;
-                            offCanvas.height = h;
-                            const offCtx = offCanvas.getContext('2d');
-                            offCtx.drawImage(item.img, roundedStartX, roundedStartY, w, h, 0, 0, w, h);
-
-                            const dataURL = offCanvas.toDataURL(format, format === 'image/png' ? undefined : quality);
-                            payload.files.push({
-                                name: 'split_' + globalIndex + '.' + ext,
-                                data: dataURL
-                            });
-                            globalIndex++;
                         }
                     }
-                }
 
-                if (payload.files.length === 0) {
-                    showToast('没有可导出的有效子图！', 'warning');
+                    if (payload.files.length === 0) {
+                        showToast('没有可导出的有效子图！', 'warning');
+                        btnSaveLocal.disabled = false;
+                        btnSaveLocal.innerHTML = originalHTML;
+                        return;
+                    }
+
+                    const response = await fetch('/api/save', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(payload)
+                    });
+                    const result = await response.json();
+
+                    if (result.success) {
+                        showToast('已成功保存至项目目录: ' + folderName + '/ (共 ' + payload.files.length + ' 张子图)', 'success');
+                    } else {
+                        showToast('保存失败: ' + result.error, 'error');
+                    }
+                } catch (error) {
+                    showToast('保存失败: ' + error.message, 'error');
+                } finally {
                     btnSaveLocal.disabled = false;
                     btnSaveLocal.innerHTML = originalHTML;
-                    return;
                 }
-
-                const response = await fetch('/api/save', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(payload)
-                });
-                const result = await response.json();
-
-                if (result.success) {
-                    showToast('已成功保存至项目目录: ' + folderName + '/ (共 ' + payload.files.length + ' 张子图)', 'success');
-                } else {
-                    showToast('保存失败: ' + result.error, 'error');
-                }
-            } catch (error) {
-                showToast('保存失败: ' + error.message, 'error');
-            } finally {
-                btnSaveLocal.disabled = false;
-                btnSaveLocal.innerHTML = originalHTML;
-            }
-        }, 100);
-    });
+            }, 100);
+        });
+    }
 }
 
 function resetExportButton() {
