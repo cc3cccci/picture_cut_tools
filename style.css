@@ -242,7 +242,8 @@ body {
 
 /* Canvas Workspace */
 .canvas-workspace {
-    flex: 1;
+    width: 400px;
+    flex: none;
     background-color: rgba(5, 7, 12, 0.4);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
@@ -300,15 +301,41 @@ body {
 
 /* Sidebar Container */
 .sidebar {
-    width: 380px;
+    flex: 1;
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
     background-color: var(--bg-card);
     backdrop-filter: blur(16px);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
-    display: flex;
-    flex-direction: column;
     box-shadow: var(--shadow-md);
     min-height: 0;
+}
+
+/* Sidebar Controls (Left side of sidebar) */
+.sidebar-controls {
+    width: 340px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow-y: auto;
+}
+
+.sidebar-controls::-webkit-scrollbar {
+    width: 4px;
+}
+.sidebar-controls::-webkit-scrollbar-track {
+    background: transparent;
+}
+.sidebar-controls::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-full);
+}
+.sidebar-controls::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
 }
 
 /* Panel Sections */
@@ -526,11 +553,11 @@ input[type="range"]::-webkit-slider-thumb:hover {
     flex: 1;
     overflow-y: auto;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
     gap: 8px;
     padding: 4px;
     min-height: 0;
-    max-height: 250px;
+    max-height: none;
 }
 
 /* Scrollbar styles */
@@ -629,6 +656,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
 /* Sidebar Footer & Main Buttons */
 .sidebar-footer {
+    margin-top: auto;
     padding: 16px;
     display: flex;
     gap: 8px;
@@ -1093,15 +1121,43 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
 .queue-list {
     display: flex;
-    gap: 8px;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 4px 2px;
+}
+
+/* Queue Item Wrapper (Drag & Drop container) */
+.queue-item-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    cursor: grab;
+    transition: transform var(--transition-fast), opacity var(--transition-fast);
+    position: relative;
+}
+
+.queue-item-wrapper:active {
+    cursor: grabbing;
+}
+
+.queue-item-wrapper.dragging {
+    opacity: 0.45;
+    transform: scale(0.95);
+}
+
+.queue-item-wrapper.drag-over .queue-item {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 12px rgba(139, 92, 246, 0.6);
+    transform: scale(1.05);
 }
 
 /* Individual Queue Item */
 .queue-item {
     position: relative;
-    width: 60px;
-    height: 60px;
-    border-radius: var(--radius-sm);
+    width: 72px;
+    height: 72px;
+    border-radius: var(--radius-md);
     border: 2px solid transparent;
     background: var(--bg-input);
     overflow: hidden;
@@ -1126,71 +1182,87 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
 .queue-item-badge {
     position: absolute;
-    bottom: 2px;
-    right: 2px;
+    bottom: 4px;
+    right: 4px;
     background: rgba(0, 0, 0, 0.7);
     color: #fff;
-    font-size: 8px;
-    padding: 1px 3px;
-    border-radius: 3px;
+    font-size: 9px;
+    padding: 2px 4px;
+    border-radius: 4px;
     font-weight: 500;
     line-height: 1;
 }
 
-.queue-item-controls {
+/* Corner Delete Button */
+.queue-item-delete {
     position: absolute;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.75);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 4px;
-    opacity: 0;
-    pointer-events: none;
-    transition: var(--transition-fast);
-}
-
-.queue-item:hover .queue-item-controls {
-    opacity: 1;
-    pointer-events: auto;
-}
-
-.queue-ctrl-btn {
+    top: 4px;
+    right: 4px;
     width: 18px;
     height: 18px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.15);
-    border: none;
+    background: rgba(239, 68, 68, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     color: #ffffff;
     display: flex;
     justify-content: center;
     align-items: center;
     cursor: pointer;
-    font-size: 9px;
-    transition: var(--transition-fast);
+    font-size: 11px;
+    font-weight: bold;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--transition-fast), transform var(--transition-fast), background-color var(--transition-fast);
     padding: 0;
+    z-index: 10;
 }
 
-.queue-ctrl-btn:hover {
-    background: var(--color-accent);
+.queue-item:hover .queue-item-delete {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.queue-item-delete:hover {
+    background: var(--color-danger);
     transform: scale(1.1);
 }
 
-.queue-ctrl-btn.ctrl-delete:hover {
-    background: var(--color-danger);
+/* Support for touch devices without hover */
+@media (hover: none) {
+    .queue-item-delete {
+        opacity: 0.85;
+        pointer-events: auto;
+    }
+}
+
+/* Filename label below thumbnail */
+.queue-item-name {
+    width: 72px;
+    font-size: 10px;
+    color: var(--text-secondary);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+}
+
+.queue-item-wrapper.active .queue-item-name {
+    color: var(--color-accent-hover);
+    font-weight: 500;
 }
 
 .queue-add-card {
-    width: 60px;
-    height: 60px;
-    border-radius: var(--radius-sm);
+    width: 72px;
+    height: 72px;
+    border-radius: var(--radius-md);
     border: 2px dashed rgba(255, 255, 255, 0.15);
     background: rgba(255, 255, 255, 0.02);
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    gap: 3px;
+    gap: 4px;
     color: var(--text-secondary);
     cursor: pointer;
     flex-shrink: 0;
@@ -1204,7 +1276,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 
 .queue-add-card span {
-    font-size: 8px;
+    font-size: 10px;
     font-weight: 500;
 }
 

@@ -2,6 +2,7 @@
 let imageQueue = []; // array of { id, file, name, img, width, height, cropX1, cropY1, cropX2, cropY2, rows, cols, hRatios, vRatios, gridSpacing, autocropTolerance, autocropShrink, cachedImgData }
 let activeQueueIndex = -1; // currently active image in the queue
 let excludedSlices = new Set(); // Set of "imageId_rowIndex_colIndex" keys for excluded sub-images
+let queueSortAsc = true; // true for A-Z, false for Z-A
 
 let currentImage = null;
 let imageWidth = 0;
@@ -77,6 +78,7 @@ const btnCustomPreset = document.getElementById('btn-custom-preset');
 const queueCountText = document.getElementById('queue-count');
 const queueList = document.getElementById('queue-list');
 const btnQueueSync = document.getElementById('btn-queue-sync');
+const btnQueueSort = document.getElementById('btn-queue-sort');
 const btnQueueClear = document.getElementById('btn-queue-clear');
 const queueAddCard = document.getElementById('queue-add-card');
 const queueAddInput = document.getElementById('queue-add-input');
@@ -133,6 +135,9 @@ function setupUploadHandlers() {
         imageHeight = 0;
         imageQueue = [];
         activeQueueIndex = -1;
+        queueSortAsc = true;
+        btnQueueSort.innerText = '按名称排序';
+        btnQueueSort.title = '按文件名对队列进行排序 (支持 A-Z / Z-A 切换)';
         excludedSlices.clear();
         previewsContainer.innerHTML = '';
         previewCountText.innerText = '0';
@@ -153,6 +158,10 @@ function setupQueueHandlers() {
 
     btnQueueSync.addEventListener('click', () => {
         syncSettingsToAll();
+    });
+
+    btnQueueSort.addEventListener('click', () => {
+        sortQueueByName();
     });
 
     queueAddCard.addEventListener('click', () => {
@@ -343,11 +352,18 @@ function loadImageFileToQueueItem(file) {
 }
 
 // Render the horizontal filmstrip image queue UI
+let draggedIndex = -1;
+
 function renderQueueUI() {
     queueCountText.innerText = imageQueue.length + ' 张';
     queueList.innerHTML = '';
 
     imageQueue.forEach((item, index) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'queue-item-wrapper' + (index === activeQueueIndex ? ' active' : '');
+        wrapper.draggable = true;
+        wrapper.dataset.index = index;
+
         const queueItem = document.createElement('div');
         queueItem.className = 'queue-item' + (index === activeQueueIndex ? ' active' : '');
         queueItem.title = item.name;
@@ -360,52 +376,71 @@ function renderQueueUI() {
         badge.className = 'queue-item-badge';
         badge.innerText = index + 1;
 
-        // Hover control overlays
-        const controls = document.createElement('div');
-        controls.className = 'queue-item-controls';
-
-        // Move item left
-        if (index > 0) {
-            const btnLeft = document.createElement('button');
-            btnLeft.className = 'queue-ctrl-btn ctrl-left';
-            btnLeft.innerHTML = '←';
-            btnLeft.title = '向前移动';
-            btnLeft.addEventListener('click', (e) => {
-                e.stopPropagation();
-                moveQueueItem(index, index - 1);
-            });
-            controls.appendChild(btnLeft);
-        }
-
-        // Delete item
+        // Delete button in the corner (replaces dense overlays)
         const btnDel = document.createElement('button');
-        btnDel.className = 'queue-ctrl-btn ctrl-delete';
+        btnDel.className = 'queue-ctrl-btn queue-item-delete';
         btnDel.innerHTML = '×';
         btnDel.title = '删除此图';
         btnDel.addEventListener('click', (e) => {
             e.stopPropagation();
             removeQueueItem(index);
         });
-        controls.appendChild(btnDel);
-
-        // Move item right
-        if (index < imageQueue.length - 1) {
-            const btnRight = document.createElement('button');
-            btnRight.className = 'queue-ctrl-btn ctrl-right';
-            btnRight.innerHTML = '→';
-            btnRight.title = '向后移动';
-            btnRight.addEventListener('click', (e) => {
-                e.stopPropagation();
-                moveQueueItem(index, index + 1);
-            });
-            controls.appendChild(btnRight);
-        }
 
         queueItem.appendChild(img);
         queueItem.appendChild(badge);
-        queueItem.appendChild(controls);
+        queueItem.appendChild(btnDel);
 
-        queueItem.addEventListener('click', () => {
+        // Filename label below thumbnail
+        const nameLabel = document.createElement('span');
+        nameLabel.className = 'queue-item-name';
+        nameLabel.innerText = item.name;
+
+        wrapper.appendChild(queueItem);
+        wrapper.appendChild(nameLabel);
+
+        // Drag and drop event listeners
+        wrapper.addEventListener('dragstart', (e) => {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', index);
+            draggedIndex = index;
+            wrapper.classList.add('dragging');
+        });
+
+        wrapper.addEventListener('dragend', () => {
+            wrapper.classList.remove('dragging');
+            document.querySelectorAll('.queue-item-wrapper').forEach(w => {
+                w.classList.remove('drag-over');
+            });
+        });
+
+        wrapper.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        });
+
+        wrapper.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            if (parseInt(wrapper.dataset.index) !== draggedIndex) {
+                wrapper.classList.add('drag-over');
+            }
+        });
+
+        wrapper.addEventListener('dragleave', () => {
+            wrapper.classList.remove('drag-over');
+        });
+
+        wrapper.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
+            const toIndex = parseInt(wrapper.dataset.index);
+            if (fromIndex !== toIndex && !isNaN(fromIndex) && !isNaN(toIndex)) {
+                moveQueueItem(fromIndex, toIndex);
+            }
+        });
+
+        // Click to select image (avoid select on delete click)
+        wrapper.addEventListener('click', (e) => {
+            if (e.target.closest('.queue-item-delete')) return;
             if (activeQueueIndex === index) return;
             saveActiveStateToQueueItem();
             activeQueueIndex = index;
@@ -415,30 +450,77 @@ function renderQueueUI() {
             updatePreviews();
         });
 
-        queueList.appendChild(queueItem);
+        queueList.appendChild(wrapper);
     });
 }
 
-// Swap positions of items in the queue
+// Move item inside queue (insertion shift)
 function moveQueueItem(from, to) {
     if (from < 0 || from >= imageQueue.length || to < 0 || to >= imageQueue.length) return;
 
     saveActiveStateToQueueItem();
 
-    const temp = imageQueue[from];
-    imageQueue[from] = imageQueue[to];
-    imageQueue[to] = temp;
+    const [movedItem] = imageQueue.splice(from, 1);
+    imageQueue.splice(to, 0, movedItem);
 
-    // Track selection index changes
+    // Track active index changes cleanly
     if (activeQueueIndex === from) {
         activeQueueIndex = to;
-    } else if (activeQueueIndex === to) {
-        activeQueueIndex = from;
+    } else {
+        if (from < activeQueueIndex && to >= activeQueueIndex) {
+            activeQueueIndex--;
+        } else if (from > activeQueueIndex && to <= activeQueueIndex) {
+            activeQueueIndex++;
+        }
     }
 
     syncActiveImageStateToUI();
     renderQueueUI();
     updatePreviews();
+}
+
+// Sort queue by image filename
+function sortQueueByName() {
+    if (imageQueue.length <= 1) {
+        showToast('图片队列中图片不足，无需排序。', 'info');
+        return;
+    }
+
+    saveActiveStateToQueueItem();
+
+    // Track active item unique ID to restore selection index post-sort
+    let activeItemId = null;
+    if (activeQueueIndex >= 0 && activeQueueIndex < imageQueue.length) {
+        activeItemId = imageQueue[activeQueueIndex].id;
+    }
+
+    // Sort queue array by filename
+    imageQueue.sort((a, b) => {
+        const comp = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+        return queueSortAsc ? comp : -comp;
+    });
+
+    // Restore active index
+    if (activeItemId) {
+        activeQueueIndex = imageQueue.findIndex(item => item.id === activeItemId);
+    }
+
+    const currentDirection = queueSortAsc ? '升序' : '降序';
+    const nextDirection = queueSortAsc ? '降序' : '升序';
+    const arrow = queueSortAsc ? '↑' : '↓';
+
+    // Toggle sorting direction state
+    queueSortAsc = !queueSortAsc;
+
+    // Update button text to display sort direction arrow
+    btnQueueSort.innerText = '按名称排序 ' + arrow;
+    btnQueueSort.title = '按文件名对队列进行排序 (当前已按' + currentDirection + '排序，点击切换为' + nextDirection + ')';
+
+    syncActiveImageStateToUI();
+    renderQueueUI();
+    updatePreviews();
+
+    showToast('已按文件名进行' + currentDirection + '排序！', 'success');
 }
 
 // Remove an image item from the queue
@@ -586,8 +668,13 @@ function setupConfigHandlers() {
     });
 
     autocropShrink.addEventListener('input', (e) => {
-        autocropShrinkVal.innerText = e.target.value + ' px';
-        runAutoCrop(false);
+        const val = parseInt(e.target.value);
+        autocropShrinkVal.innerText = val + ' px';
+        if (activeQueueIndex !== -1) {
+            imageQueue[activeQueueIndex].autocropShrink = val;
+        }
+        draw();
+        updatePreviews();
     });
 
     // Gutter spacing slider
@@ -1045,6 +1132,39 @@ function draw() {
     
     ctx.setLineDash([]); // Reset line dash
 
+    // 5. Draw actual sub-image crop borders if spacing or shrink is active
+    if (gridSpacing > 0 || (activeQueueIndex !== -1 && imageQueue[activeQueueIndex].autocropShrink > 0)) {
+        const shrinkVal = activeQueueIndex !== -1 ? imageQueue[activeQueueIndex].autocropShrink : 0;
+        
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.75)'; // Beautiful sky-blue dashed border
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const x = canvasV[c] || cx1;
+                const nextX = canvasV[c + 1] || cx2;
+                const y = canvasH[r] || cy1;
+                const nextY = canvasH[r + 1] || cy2;
+
+                let startX = x + shrinkVal * scale;
+                let endX = nextX - shrinkVal * scale;
+                if (c > 0) startX += (gridSpacing / 2) * scale;
+                if (c < cols - 1) endX -= (gridSpacing / 2) * scale;
+
+                let startY = y + shrinkVal * scale;
+                let endY = nextY - shrinkVal * scale;
+                if (r > 0) startY += (gridSpacing / 2) * scale;
+                if (r < rows - 1) endY -= (gridSpacing / 2) * scale;
+
+                if (endX > startX && endY > startY) {
+                    ctx.strokeRect(startX, startY, endX - startX, endY - startY);
+                }
+            }
+        }
+        ctx.setLineDash([]); // Reset dash state
+    }
+
     // 4. Draw Corner Handles (circles with handles)
     const corners = [
         { x: cx1, y: cy1 },
@@ -1107,19 +1227,21 @@ function updatePreviews() {
     ];
 
     let currentSlicesCount = 0;
+    const shrinkVal = activeItem.autocropShrink || 0;
+
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
             const x = boundsV[c];
             const y = boundsH[r];
             
-            // Adjust inner boundaries for cell gutter spacing
-            let startX = x;
-            let endX = boundsV[c + 1];
+            // Adjust inner boundaries for cell gutter spacing AND slice inward shrink
+            let startX = x + shrinkVal;
+            let endX = boundsV[c + 1] - shrinkVal;
             if (c > 0) startX += gridSpacing / 2;
             if (c < cols - 1) endX -= gridSpacing / 2;
             
-            let startY = y;
-            let endY = boundsH[r + 1];
+            let startY = y + shrinkVal;
+            let endY = boundsH[r + 1] - shrinkVal;
             if (r > 0) startY += gridSpacing / 2;
             if (r < rows - 1) endY -= gridSpacing / 2;
 
@@ -1748,13 +1870,6 @@ function runAutoCrop(showToastFeedback = false) {
             }
         }
 
-        // Apply inward shrink to shave off anti-aliased border lines
-        if (shrinkPixels > 0) {
-            newX1 = Math.min(newX2, newX1 + shrinkPixels);
-            newY1 = Math.min(newY2, newY1 + shrinkPixels);
-            newX2 = Math.max(newX1, newX2 - shrinkPixels);
-            newY2 = Math.max(newY1, newY2 - shrinkPixels);
-        }
 
         // Constraints validation
         const cropW = newX2 - newX1;
